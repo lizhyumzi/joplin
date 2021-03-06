@@ -64,7 +64,7 @@ shared.saveNoteButton_press = async function(comp, folderId = null, options = nu
 
 	const hasAutoTitle = comp.state.newAndNoTitleChangeNoteId || (isProvisionalNote && !note.title);
 	if (hasAutoTitle && options.autoTitle) {
-		note.title = Note.defaultTitle(note);
+		note.title = Note.defaultTitle(note.body);
 		if (saveOptions.fields && saveOptions.fields.indexOf('title') < 0) saveOptions.fields.push('title');
 	}
 
@@ -90,7 +90,7 @@ shared.saveNoteButton_press = async function(comp, folderId = null, options = nu
 		note.body = stateNote.body;
 	}
 
-	let newState = {
+	const newState = {
 		lastSavedNote: Object.assign({}, note),
 		note: note,
 	};
@@ -144,9 +144,9 @@ shared.saveOneProperty = async function(comp, name, value) {
 };
 
 shared.noteComponent_change = function(comp, propName, propValue) {
-	let newState = {};
+	const newState = {};
 
-	let note = Object.assign({}, comp.state.note);
+	const note = Object.assign({}, comp.state.note);
 	note[propName] = propValue;
 	newState.note = note;
 
@@ -189,7 +189,7 @@ shared.attachedResources = async function(noteBody) {
 
 shared.isModified = function(comp) {
 	if (!comp.state.note || !comp.state.lastSavedNote) return false;
-	let diff = BaseModel.diffObjects(comp.state.lastSavedNote, comp.state.note);
+	const diff = BaseModel.diffObjects(comp.state.lastSavedNote, comp.state.note);
 	delete diff.type_;
 	return !!Object.getOwnPropertyNames(diff).length;
 };
@@ -200,8 +200,7 @@ shared.initState = async function(comp) {
 	const note = await Note.load(comp.props.noteId);
 	let mode = 'view';
 
-	if (isProvisionalNote) {
-		// note = comp.props.itemType == 'todo' ? Note.newTodo(comp.props.folderId) : Note.new(comp.props.folderId);
+	if (isProvisionalNote && !comp.props.sharedData) {
 		mode = 'edit';
 		comp.scheduleFocusUpdate();
 	}
@@ -218,8 +217,25 @@ shared.initState = async function(comp) {
 		noteResources: await shared.attachedResources(note ? note.body : ''),
 	});
 
+
 	if (comp.props.sharedData) {
-		this.noteComponent_change(comp, 'body', comp.props.sharedData.value);
+		if (comp.props.sharedData.title) {
+			this.noteComponent_change(comp, 'title', comp.props.sharedData.title);
+		}
+		if (comp.props.sharedData.text) {
+			this.noteComponent_change(comp, 'body', comp.props.sharedData.text);
+		}
+		if (comp.props.sharedData.resources) {
+			for (let i = 0; i < comp.props.sharedData.resources.length; i++) {
+				const resource = comp.props.sharedData.resources[i];
+				reg.logger().info(`about to attach resource ${JSON.stringify(resource)}`);
+				await comp.attachFile({
+					uri: resource.uri,
+					type: resource.mimeType,
+					fileName: resource.name,
+				}, null);
+			}
+		}
 	}
 
 	// eslint-disable-next-line require-atomic-updates
@@ -227,13 +243,13 @@ shared.initState = async function(comp) {
 };
 
 shared.toggleIsTodo_onPress = function(comp) {
-	let newNote = Note.toggleIsTodo(comp.state.note);
-	let newState = { note: newNote };
+	const newNote = Note.toggleIsTodo(comp.state.note);
+	const newState = { note: newNote };
 	comp.setState(newState);
 };
 
 shared.toggleCheckbox = function(ipcMessage, noteBody) {
-	let newBody = noteBody.split('\n');
+	const newBody = noteBody.split('\n');
 	const p = ipcMessage.split(':');
 	const lineIndex = Number(p[p.length - 1]);
 	if (lineIndex >= newBody.length) {
